@@ -1,0 +1,34 @@
+# ===== Bí mật — TUYỆT ĐỐI KHÔNG commit =====
+.env
+.env.local
+.env.*.local
+.streamlit/secrets.toml   # nơi Streamlit hay để secret
+
+# ===== Môi trường ảo =====
+.venv/
+venv/
+env/
+ENV/
+
+# ===== Cache / build của Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ===== Log & file tạm =====
+*.log
+*.tmp
+*.bak
+
+# ===== Rác của hệ điều hành / IDE =====
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
