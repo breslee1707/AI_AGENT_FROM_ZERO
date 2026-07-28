@@ -1,228 +1,433 @@
-# HuyG Agent Series — Bài 2: Xây AI Agent biết PHỐI HỢP nhiều tool (có UI)
+<div align="center">
 
-> Bài này ta dựng một **AI Agent** — một LLM biết **tự quyết định** dùng công cụ
-> (tool) để trả lời. Điểm nhấn: agent có thể **phối hợp nhiều tool trong một câu hỏi**
-> (đọc PDF → tính toán → đổi tiền tệ). Có sẵn giao diện chat. Code tối giản, chú thích
-> tiếng Việt đầy đủ, giải thích rõ *tại sao* chọn từng tham số/phương pháp.
+# 🤖 AI Agent From Zero
 
----
+### Xây dựng AI Agent đa công cụ, đa nhà cung cấp LLM — từ những thành phần cơ bản nhất
 
-## 1. Agent là gì? (30 giây)
+Một project Python nhỏ gọn giúp bạn nhìn rõ cách một AI Agent **suy luận → gọi tool → quan sát kết quả → trả lời**, thay vì để framework che giấu toàn bộ quá trình.
 
-Một LLM bình thường chỉ biết sinh chữ. **Agent** bọc thêm cho nó một *vòng lặp có suy
-nghĩ*: model tự nhìn câu hỏi rồi **chọn** làm gì — đọc PDF? bấm máy tính? đổi tiền? hay
-trả lời thẳng? — làm xong **quan sát** kết quả rồi đi bước tiếp theo, cho tới khi đủ
-dữ kiện để trả lời.
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.36%2B-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![LLM Providers](https://img.shields.io/badge/LLM-Gemini%20%7C%20Claude%20%7C%20OpenAI-6E56CF?style=for-the-badge)](#nha-cung-cap-llm)
+[![Architecture](https://img.shields.io/badge/Architecture-Provider--agnostic-0EA5E9?style=for-the-badge)](#kien-truc-he-thong)
+[![GitHub stars](https://img.shields.io/github/stars/breslee1707/AI_AGENT_FROM_ZERO?style=for-the-badge&logo=github&color=181717)](https://github.com/breslee1707/AI_AGENT_FROM_ZERO/stargazers)
 
-```
-        ┌────────────────── VÒNG LẶP AGENT (mỗi câu hỏi) ──────────────────┐
- Câu hỏi ─► LLM suy nghĩ ─► cần tool? ──có──► chạy tool ─► đưa kết quả về ─┐
-                              │  không                                     │
-                              ▼                                            │
-                          Trả lời  ◄───────────────(lặp lại)──────────────┘
-        └──────────────────────────────────────────────────────────────────┘
-```
+**[Bắt đầu nhanh](#bat-dau-nhanh) · [Kiến trúc](#kien-truc-he-thong) · [Cách hoạt động](#agent-hoat-dong-nhu-the-nao) · [Thêm tool](#them-tool-moi) · [Xử lý lỗi](#xu-ly-loi-thuong-gap)**
 
-Ba từ khoá: **Suy nghĩ → Hành động (gọi tool) → Quan sát** (Think → Act → Observe).
+</div>
 
 ---
 
-## 2. Cấu trúc thư mục
+<a id="tong-quan"></a>
+## Tổng quan
 
+Một LLM thông thường chủ yếu sinh văn bản. Project này bổ sung cho LLM một **vòng lặp Agent** và một **bộ công cụ có kiểm soát**, để model có thể tự quyết định khi nào cần hành động.
+
+Ví dụ với yêu cầu:
+
+> “Đọc hóa đơn PDF, cộng các khoản rồi đổi tổng tiền sang USD.”
+
+Agent có thể tự phối hợp ba tool theo đúng thứ tự:
+
+```mermaid
+flowchart LR
+    Q["📨 Yêu cầu của người dùng"] --> PDF["📄 read_pdf<br/>Trích xuất số liệu"]
+    PDF --> CALC["🧮 calculator<br/>Tính tổng"]
+    CALC --> FX["💱 convert_currency<br/>Quy đổi tiền tệ"]
+    FX --> A["✅ Câu trả lời cuối"]
+
+    classDef input fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E,stroke-width:2px;
+    classDef tool fill:#F3E8FF,stroke:#9333EA,color:#581C87,stroke-width:2px;
+    classDef output fill:#DCFCE7,stroke:#16A34A,color:#14532D,stroke-width:2px;
+    class Q input;
+    class PDF,CALC,FX tool;
+    class A output;
 ```
-Agent_Series/
-├── .env                      # cấu hình THẬT (đã điền sẵn key Gemini) — KHÔNG commit
-├── .env.example              # mẫu cấu hình cho mọi provider
-├── requirements.txt          # danh sách thư viện (nhẹ, không cần torch)
-├── run.ps1                   # script 1-chạm cho Windows (tạo venv, cài, mở app)
-├── README.md                 # file bạn đang đọc
-├── app.py                    # 🖥️ giao diện chat (Streamlit)
-│
-├── agent_core/               # 🧠 package chính — mỗi file một nhiệm vụ
-│   ├── config.py             #   đọc .env, chọn provider
-│   ├── tools.py              #   khai báo 3 tool: read_pdf, calculator, convert_currency
-│   ├── providers.py          #   "phiên dịch" giữa agent và Gemini/Claude/OpenAI
-│   └── agent.py              #   ⭐ VÒNG LẶP AGENT (phần cốt lõi, không phụ thuộc hãng)
-│
-└── scripts/
-    └── chat_cli.py           # chat với agent trong terminal (không cần UI)
+
+### Vì sao project này hữu ích?
+
+| Điểm nổi bật | Giá trị |
+|---|---|
+| 🔍 **Minh bạch** | Xem được tool nào đã được gọi, tham số và kết quả của từng bước |
+| 🔗 **Phối hợp nhiều tool** | Kết quả của tool trước trở thành dữ liệu cho quyết định tiếp theo |
+| 🔌 **Đa nhà cung cấp** | Dùng cùng một Agent với Gemini, Claude hoặc OpenAI |
+| 🧩 **Dễ mở rộng** | Thêm tool mới bằng một `ToolSpec`, không cần sửa vòng lặp Agent |
+| 🛡️ **Có lớp an toàn cơ bản** | Giới hạn số bước, bắt lỗi tool và máy tính không dùng `eval()` |
+| 🖥️ **Hai cách sử dụng** | Giao diện web Streamlit và CLI trong terminal |
+| 🧠 **Hội thoại nhiều lượt** | Agent giữ lịch sử cho đến khi người dùng đặt lại cuộc trò chuyện |
+
+> Đây là project học tập: code ưu tiên sự rõ ràng, dễ đọc và dễ thử nghiệm hơn độ phức tạp của một hệ thống production.
+
+<a id="kien-truc-he-thong"></a>
+## Kiến trúc hệ thống
+
+Project tách phần điều phối Agent khỏi SDK của từng hãng. Mọi provider đều được chuyển về cùng một định dạng tin nhắn chuẩn hóa, nhờ đó `Agent` không cần biết model phía sau là Gemini, Claude hay OpenAI.
+
+```mermaid
+flowchart TB
+    U["👤 Người dùng"]
+
+    subgraph I["Lớp giao diện"]
+        WEB["🖥️ Streamlit UI<br/>app.py"]
+        CLI["⌨️ Terminal CLI<br/>scripts/chat_cli.py"]
+    end
+
+    subgraph C["Agent Core"]
+        AGENT["🧠 Agent Loop<br/>agent.py"]
+        CONFIG["⚙️ Settings<br/>config.py"]
+        ADAPTER["🔄 Provider Adapters<br/>providers.py"]
+        REGISTRY["🧰 Tool Registry<br/>tools.py"]
+    end
+
+    subgraph L["Nhà cung cấp LLM"]
+        GEMINI["Gemini"]
+        CLAUDE["Claude"]
+        OPENAI["OpenAI"]
+    end
+
+    subgraph T["Công cụ mặc định"]
+        PDF["📄 read_pdf"]
+        CALC["🧮 calculator"]
+        FX["💱 convert_currency"]
+    end
+
+    U --> WEB
+    U --> CLI
+    WEB --> AGENT
+    CLI --> AGENT
+    CONFIG -. cấu hình .-> WEB
+    CONFIG -. cấu hình .-> CLI
+    AGENT <--> ADAPTER
+    ADAPTER <--> GEMINI
+    ADAPTER <--> CLAUDE
+    ADAPTER <--> OPENAI
+    AGENT <--> REGISTRY
+    REGISTRY --> PDF
+    REGISTRY --> CALC
+    REGISTRY --> FX
+
+    classDef interface fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E;
+    classDef core fill:#F3E8FF,stroke:#9333EA,color:#581C87;
+    classDef provider fill:#FFF7ED,stroke:#EA580C,color:#7C2D12;
+    classDef tool fill:#DCFCE7,stroke:#16A34A,color:#14532D;
+    class WEB,CLI interface;
+    class AGENT,CONFIG,ADAPTER,REGISTRY core;
+    class GEMINI,CLAUDE,OPENAI provider;
+    class PDF,CALC,FX tool;
 ```
 
-**Vì sao tách nhỏ vậy?** Mỗi file một việc → dễ đọc, dễ dạy, dễ thay thế. Muốn thêm
-tool mới chỉ sửa `tools.py`; muốn thêm nhà cung cấp LLM chỉ sửa `providers.py`; phần
-"bộ não" (`agent.py`) không phải đụng tới.
+### Vai trò của từng thành phần
 
----
+| Thành phần | Trách nhiệm |
+|---|---|
+| `app.py` | Hiển thị chat, trạng thái gọi tool, lịch sử và cấu hình đang dùng |
+| `agent_core/agent.py` | Chứa system prompt, lịch sử hội thoại và vòng lặp điều phối tool |
+| `agent_core/providers.py` | Chuyển đổi định dạng chung sang API của Gemini, Anthropic và OpenAI |
+| `agent_core/tools.py` | Khai báo JSON Schema, đăng ký và thực thi các tool |
+| `agent_core/config.py` | Đọc `.env`, kiểm tra provider và API key đang hoạt động |
+| `scripts/chat_cli.py` | Chạy Agent trực tiếp trong terminal để thử nghiệm nhanh |
 
-## 3. Cài đặt — làm theo thứ tự
+<a id="agent-hoat-dong-nhu-the-nao"></a>
+## Agent hoạt động như thế nào?
 
-> Yêu cầu: Python 3.10+. Cài đặt bài này **nhẹ và nhanh** (không kéo theo torch).
+Mỗi câu hỏi đi qua chu trình **Think → Act → Observe**. Model có thể trả lời ngay, gọi một tool, hoặc gọi nhiều tool song song trong cùng một lượt. Sau khi nhận kết quả tool, model tiếp tục quyết định cho đến khi có câu trả lời cuối hoặc chạm giới hạn `AGENT_MAX_STEPS`.
 
-### Cách nhanh (Windows): 1 lệnh
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Người dùng
+    participant Agent as Agent Loop
+    participant LLM as LLM Provider
+    participant Tools as Tool Registry
+
+    User->>Agent: Gửi câu hỏi
+    loop Tối đa AGENT_MAX_STEPS vòng
+        Agent->>LLM: System prompt + lịch sử + JSON Schema của tools
+        LLM-->>Agent: Văn bản hoặc danh sách tool_calls
+        alt Model yêu cầu gọi tool
+            Agent->>Tools: run(tool_name, arguments)
+            Tools-->>Agent: Kết quả dạng văn bản
+            Note over Agent: Ghi kết quả vào lịch sử để model quan sát
+        else Model trả lời trực tiếp
+            Agent-->>User: AgentResult(text, steps)
+        end
+    end
+```
+
+`steps` lưu lại tên tool, tham số và kết quả của mỗi lần gọi. Streamlit dùng dữ liệu này để hiển thị mục **“Agent đã làm gì?”** dưới câu trả lời.
+
+<a id="bat-dau-nhanh"></a>
+## Bắt đầu nhanh
+
+### Yêu cầu
+
+- Python **3.10+**
+- Một API key của **Gemini**, **Anthropic** hoặc **OpenAI**
+- Git và PowerShell nếu dùng script cài đặt nhanh trên Windows
+
+### 1. Clone repository
+
+```bash
+git clone https://github.com/breslee1707/AI_AGENT_FROM_ZERO.git
+cd AI_AGENT_FROM_ZERO
+```
+
+### 2. Cài đặt
+
+<details open>
+<summary><strong>Windows — cách nhanh nhất</strong></summary>
 
 ```powershell
 .\run.ps1
 ```
 
-Script sẽ tự tạo venv, cài thư viện, tạo `.env` (nếu chưa có) và mở giao diện.
+Script sẽ tạo `.venv`, cài dependencies, tạo `.env` từ file mẫu nếu cần và mở Streamlit. Lần chạy đầu tiên, hãy điền API key vào `.env` rồi chạy lại script.
 
-### Cách thủ công (hiểu từng bước)
+</details>
+
+<details>
+<summary><strong>Windows — cài đặt thủ công</strong></summary>
 
 ```powershell
-# 1) Tạo & kích hoạt môi trường ảo
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-
-# 2) Cài thư viện
 pip install -r requirements.txt
-
-# 3) Tạo file cấu hình
 Copy-Item .env.example .env
-# -> mở .env, dán API key (mặc định đã dùng Gemini)
 ```
 
-> 💡 File `.env` trong repo này **đã điền sẵn** một key Gemini để chạy được ngay. Khi
-> phát cho học viên, hãy để họ tự điền key của mình (lấy miễn phí ở
-> https://aistudio.google.com/apikey).
+</details>
 
----
+<details>
+<summary><strong>macOS / Linux</strong></summary>
 
-## 4. Chạy thử
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+```
 
-### Giao diện chat (khuyến khích)
+</details>
 
-```powershell
+### 3. Cấu hình API key
+
+Mở `.env`, chọn một provider và điền key tương ứng:
+
+```dotenv
+LLM_PROVIDER=gemini
+
+GEMINI_API_KEY=your_api_key_here
+GEMINI_MODEL=gemini-flash-latest
+```
+
+> 🔐 `.env` đã được thêm vào `.gitignore`. Không commit, chụp màn hình hoặc chia sẻ API key công khai.
+
+### 4. Chạy ứng dụng
+
+Giao diện web:
+
+```bash
 streamlit run app.py
 ```
 
-Trình duyệt mở ra ô chat. Thử vài câu:
+CLI — hỏi một câu rồi thoát:
 
-| Bạn hỏi | Agent sẽ tự làm gì |
-|---|---|
-| `100 USD đổi ra bao nhiêu VND?` | gọi tool **convert_currency** |
-| `15% của 2.000.000 là bao nhiêu, rồi đổi sang USD?` | **calculator** → **convert_currency** (2 tool nối tiếp) |
-| `Đọc file D:/baogia.pdf, cộng các khoản rồi đổi sang USD` | **read_pdf** → **calculator** → **convert_currency** (3 tool!) |
-| `Xin chào, bạn là ai?` | trả lời thẳng, không cần tool |
-
-Bấm **"🔍 Agent đã làm gì?"** dưới mỗi câu trả lời để xem agent đã gọi tool nào, theo
-thứ tự nào — đây chính là chỗ thấy rõ agent **phối hợp** tool.
-
-### Terminal (không cần UI)
-
-```powershell
-python scripts/chat_cli.py "100 USD bang bao nhieu VND?"
-python scripts/chat_cli.py        # chế độ hỏi–đáp liên tục
+```bash
+python scripts/chat_cli.py "15% của 2.000.000 là bao nhiêu, rồi đổi sang USD?"
 ```
 
----
+CLI — trò chuyện liên tục:
 
-## 5. Luồng dữ liệu chạy qua code như thế nào?
+```bash
+python scripts/chat_cli.py
+```
 
-Khi bạn gõ một câu hỏi, `agent.run()` trong `agent.py` làm việc này:
+<a id="cach-su-dung"></a>
+## Cách sử dụng
 
-| # | File | Việc làm |
-|---|------|----------|
-| 1 | `providers.py` | Gửi lịch sử hội thoại + danh sách tool cho LLM, nhận về "muốn gọi tool nào" hay "câu trả lời" |
-| 2 | `agent.py` | Nếu model muốn gọi tool → chạy tool, đưa kết quả lại rồi **lặp lại** bước 1 |
-| 3 | `tools.py` | Tool thực thi và trả về chuỗi kết quả |
-| 4 | `agent.py` | Khi model không gọi tool nữa → trả `AgentResult(text, steps)` |
+Thử các prompt sau để quan sát cách Agent chọn và phối hợp công cụ:
 
-Điểm hay: **vòng lặp ở `agent.py` viết đúng một lần** mà chạy được với cả Gemini,
-Claude và OpenAI, nhờ lớp "phiên dịch" trong `providers.py` chuẩn hoá tin nhắn về một
-định dạng chung. Nhờ vòng lặp này, model có thể gọi tool **nhiều lần liên tiếp** để
-phối hợp (kết quả read_pdf làm đầu vào cho calculator, rồi cho convert_currency).
+| Prompt mẫu | Luồng dự kiến |
+|---|---|
+| `100 USD đổi ra bao nhiêu VND?` | `convert_currency` |
+| `15% của 2.000.000 là bao nhiêu?` | `calculator` |
+| `15% của 2.000.000 là bao nhiêu, rồi đổi sang USD?` | `calculator` → `convert_currency` |
+| `Đọc file D:/Documents/hoa-don.pdf và tóm tắt nội dung` | `read_pdf` |
+| `Đọc hóa đơn PDF, cộng các khoản rồi đổi sang USD` | `read_pdf` → `calculator` → `convert_currency` |
+| `Xin chào, bạn có thể làm gì?` | Trả lời trực tiếp, không cần tool |
 
----
+Trong giao diện Streamlit:
 
-## 6. Đổi nhà cung cấp LLM (Gemini / Claude / OpenAI)
+1. Thanh bên hiển thị provider, model và danh sách tool hiện tại.
+2. Trạng thái xử lý cập nhật ngay khi Agent gọi hoặc nhận kết quả từ tool.
+3. Mỗi câu trả lời có thể mở rộng để xem toàn bộ dấu vết thực thi.
+4. Nút **“Xóa hội thoại”** đặt lại cả lịch sử giao diện và bộ nhớ của Agent.
 
-Chỉ cần sửa `.env`:
+<a id="nha-cung-cap-llm"></a>
+## Nhà cung cấp LLM
+
+Chỉ cần đổi `LLM_PROVIDER` trong `.env`; vòng lặp Agent và các tool không thay đổi.
+
+| Provider | Giá trị cấu hình | Biến API key | Model mặc định trong project |
+|---|---|---|---|
+| Google Gemini | `gemini` | `GEMINI_API_KEY` | `gemini-flash-latest` |
+| Anthropic Claude | `anthropic` | `ANTHROPIC_API_KEY` | `claude-opus-4-8` |
+| OpenAI | `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` |
+
+Ví dụ chuyển sang Anthropic:
 
 ```dotenv
-LLM_PROVIDER=anthropic          # đổi thành nhà cung cấp bạn muốn
-ANTHROPIC_API_KEY=sk-ant-...    # điền key tương ứng
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=your_api_key_here
+ANTHROPIC_MODEL=claude-haiku-4-5
 ```
 
-- **gemini** — mặc định, miễn phí.
-- **anthropic** (Claude) — cần key ở https://console.anthropic.com/. Muốn rẻ: đặt
-  `ANTHROPIC_MODEL=claude-haiku-4-5`.
-- **openai** (GPT/Codex) — cần key ở https://platform.openai.com/api-keys.
+> Tên model, quyền truy cập và chi phí phụ thuộc tài khoản của từng nhà cung cấp. Nếu model mặc định không khả dụng, hãy đổi biến `*_MODEL` sang model mà tài khoản của bạn được cấp.
 
-> Đường **đã kiểm thử kỹ** là Gemini. Hai đường còn lại viết theo đúng một ý tưởng
-> (xem `providers.py`) — dán key vào là chạy, nhưng bạn nên tự kiểm tra với tài khoản
-> của mình vì tên model mỗi hãng thay đổi theo thời gian.
+<a id="cau-hinh"></a>
+## Cấu hình
 
----
+| Biến | Mặc định | Mô tả |
+|---|---:|---|
+| `LLM_PROVIDER` | `gemini` | Provider đang hoạt động: `gemini`, `anthropic` hoặc `openai` |
+| `GEMINI_MODEL` | `gemini-flash-latest` | Model dùng bởi Gemini adapter |
+| `ANTHROPIC_MODEL` | `claude-opus-4-8` | Model dùng bởi Anthropic adapter |
+| `OPENAI_MODEL` | `gpt-4o-mini` | Model dùng bởi OpenAI adapter |
+| `AGENT_TEMPERATURE` | `0.2` | Độ ngẫu nhiên thấp để quyết định gọi tool ổn định hơn |
+| `AGENT_MAX_STEPS` | `5` | Số vòng suy luận tối đa cho mỗi yêu cầu |
+| `AGENT_MAX_TOKENS` | `2048` | Giới hạn token đầu ra mỗi lượt ở adapter có sử dụng giá trị này |
 
-## 7. Các tool đang có (và cách thêm tool mới)
+Project chỉ yêu cầu API key của provider đang được chọn; key của hai provider còn lại có thể để trống.
 
-| Tool | Việc | Minh hoạ điều gì |
-|---|---|---|
-| `read_pdf` | Đọc nội dung văn bản từ file PDF | tool đọc **file** |
-| `calculator` | Tính biểu thức số học **an toàn** (không dùng `eval()`) | tool **tính toán** |
-| `convert_currency` | Đổi tiền tệ theo bảng tỷ giá cố định (offline) | tool có **nhiều tham số** + tra bảng |
+<a id="bo-cong-cu"></a>
+## Bộ công cụ mặc định
 
-**Thêm tool mới rất đơn giản** — trong `tools.py`, thêm một `ToolSpec` vào
-`build_default_registry()`:
+| Tool | Input chính | Công dụng | Giới hạn hiện tại |
+|---|---|---|---|
+| `read_pdf` | `path`, `max_chars` | Trích xuất văn bản từ PDF cục bộ | Mặc định lấy 4.000 ký tự đầu; không OCR file scan |
+| `calculator` | `expression` | Tính biểu thức số học bằng AST | Chỉ cho phép số và các toán tử cơ bản |
+| `convert_currency` | `amount`, `from_currency`, `to_currency` | Quy đổi USD, VND, EUR, JPY, GBP, CNY | Dùng bảng tỷ giá minh họa cố định, không phải dữ liệu thời gian thực |
+
+### Một số quyết định thiết kế
+
+- **Máy tính dùng AST:** từ chối tên biến, gọi hàm và câu lệnh tùy ý; an toàn hơn nhiều so với chạy `eval()` trên dữ liệu do model tạo.
+- **Tool luôn trả về chuỗi:** cả kết quả thành công lẫn lỗi đều có thể được LLM đọc và phản hồi ở vòng tiếp theo.
+- **Giới hạn số bước:** ngăn Agent lặp vô hạn, treo ứng dụng hoặc tiêu thụ quota ngoài ý muốn.
+- **Adapter chuẩn hóa provider:** một vòng lặp Agent dùng chung cho ba SDK khác nhau.
+- **Tắt automatic function calling của Gemini:** project tự điều khiển vòng lặp để người học quan sát được từng bước.
+- **Giữ `thought_signature` của Gemini:** chữ ký được phát lại cùng function call ở lượt sau theo yêu cầu của SDK/model tương ứng.
+
+<a id="them-tool-moi"></a>
+## Thêm tool mới
+
+Mỗi tool gồm bốn phần: tên, mô tả để model biết **khi nào nên gọi**, JSON Schema của tham số và hàm Python thực thi.
+
+Ví dụ thêm tool xem giờ hiện tại vào `build_default_registry()` trong `agent_core/tools.py`:
 
 ```python
+from datetime import datetime
+
+
+def get_current_time(timezone: str = "Asia/Ho_Chi_Minh") -> str:
+    # Đây là ví dụ tối giản; production nên xử lý timezone bằng zoneinfo.
+    return f"Múi giờ yêu cầu: {timezone}; giờ hệ thống: {datetime.now().isoformat()}"
+
+
 ToolSpec(
-    name="ten_tool",
-    description="Mô tả rõ KHI NÀO model nên gọi tool này.",
-    parameters={"type": "object",
-                "properties": {"x": {"type": "string", "description": "..."}},
-                "required": ["x"]},
-    func=ham_python_that_su,   # nhận x, trả về chuỗi kết quả
+    name="get_current_time",
+    description="Trả về thời gian hiện tại khi người dùng hỏi ngày hoặc giờ.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "timezone": {
+                "type": "string",
+                "description": "Tên múi giờ IANA, ví dụ Asia/Ho_Chi_Minh.",
+            }
+        },
+    },
+    func=get_current_time,
 )
 ```
 
-Không cần đụng tới `agent.py` hay `providers.py`.
+Sau khi đăng ký, tool mới tự động xuất hiện trong sidebar và được chuyển sang định dạng phù hợp với provider đang dùng. Bạn không cần sửa `agent.py`.
+
+<a id="cau-truc-thu-muc"></a>
+## Cấu trúc thư mục
+
+```text
+AI_AGENT_FROM_ZERO/
+├── agent_core/
+│   ├── __init__.py          # Public API và phiên bản package
+│   ├── agent.py             # Vòng lặp Agent, prompt và lịch sử hội thoại
+│   ├── config.py            # Đọc và kiểm tra cấu hình môi trường
+│   ├── providers.py         # Adapter Gemini / Anthropic / OpenAI
+│   └── tools.py             # ToolSpec, ToolRegistry và ba tool mặc định
+├── scripts/
+│   └── chat_cli.py          # Giao diện dòng lệnh
+├── app.py                   # Giao diện chat Streamlit
+├── run.ps1                  # Cài đặt và chạy nhanh trên Windows
+├── requirements.txt         # Python dependencies
+├── .env.example             # Mẫu cấu hình, không chứa secret
+├── .gitignore
+└── README.md
+```
+
+Để đọc code theo luồng dễ hiểu nhất: `config.py` → `tools.py` → `providers.py` → `agent.py` → `app.py`.
+
+<a id="gioi-han-va-an-toan"></a>
+## Giới hạn và lưu ý an toàn
+
+- `convert_currency` phục vụ demo luồng tool; **không dùng kết quả cho giao dịch tài chính**.
+- `read_pdf` chỉ đọc PDF chứa lớp văn bản. PDF ảnh scan cần thêm OCR.
+- Đường dẫn PDF được Agent mở trên chính máy đang chạy ứng dụng; chỉ sử dụng file bạn tin cậy.
+- Nội dung PDF được gửi tới provider LLM trong lịch sử hội thoại. Không dùng tài liệu nhạy cảm nếu chưa đánh giá chính sách dữ liệu của provider.
+- Project chưa có sandbox riêng cho tool tùy chỉnh. Hãy kiểm tra chặt input và quyền truy cập khi thêm tool có tác động hệ thống.
+- Lịch sử nằm trong bộ nhớ tiến trình, chưa được lưu bền vững sau khi ứng dụng khởi động lại.
+
+<a id="xu-ly-loi-thuong-gap"></a>
+## Xử lý lỗi thường gặp
+
+| Hiện tượng | Nguyên nhân thường gặp | Cách xử lý |
+|---|---|---|
+| `Thiếu ..._API_KEY` | Chưa tạo `.env` hoặc chọn sai provider | Sao chép `.env.example`, điền key và kiểm tra `LLM_PROVIDER` |
+| `ModuleNotFoundError` | Chưa cài dependencies hoặc chưa kích hoạt `.venv` | Kích hoạt môi trường ảo rồi chạy `pip install -r requirements.txt` |
+| `Không tìm thấy file` | Đường dẫn PDF sai hoặc app không có quyền đọc | Dùng đường dẫn tuyệt đối và kiểm tra quyền truy cập |
+| PDF không trích được chữ | PDF là ảnh scan | Chạy OCR trước hoặc bổ sung một OCR tool |
+| Lỗi model không tồn tại | Tài khoản không có quyền với model đã cấu hình | Đổi biến `*_MODEL` trong `.env` |
+| `429`, quota hoặc rate limit | Hết quota hoặc gửi quá nhiều yêu cầu | Chờ rồi thử lại, đổi model hoặc kiểm tra billing |
+| Agent dừng trước khi xong | Đã chạm `AGENT_MAX_STEPS` | Viết prompt rõ hơn hoặc tăng giới hạn có kiểm soát |
+
+<a id="bai-tap-mo-rong"></a>
+## Bài tập mở rộng
+
+- [ ] Thêm tool `get_current_time` không cần API bên ngoài.
+- [ ] Thay bảng tỷ giá cố định bằng một API tỷ giá thời gian thực.
+- [ ] Thêm OCR cho PDF scan.
+- [ ] Kết nối `search_knowledge_base` để biến pipeline RAG thành một tool.
+- [ ] Lưu lịch sử hội thoại vào SQLite.
+- [ ] Thêm timeout, retry và telemetry cho mỗi lần gọi tool.
+- [ ] Viết unit test cho `calculator`, `ToolRegistry` và vòng lặp Agent.
+- [ ] Chạy tool trong sandbox trước khi dùng cho môi trường production.
+
+<a id="dong-gop"></a>
+## Đóng góp
+
+Issue và pull request đều được chào đón. Một luồng đóng góp gợi ý:
+
+```bash
+git checkout -b feature/ten-tinh-nang
+git commit -m "feat: mô tả thay đổi"
+git push origin feature/ten-tinh-nang
+```
+
+Khi thêm provider hoặc tool mới, hãy giữ interface chuẩn hóa hiện tại và bổ sung ví dụ sử dụng vào README.
 
 ---
 
-## 8. Vì sao chọn tham số / phương pháp này? (ghi chú thiết kế)
+<div align="center">
 
-- **`temperature` thấp (0.2):** agent cần **quyết định gọi tool ổn định**, không cần
-  bay bổng. Số thấp → ít ngẫu nhiên, ít bịa. *(Model Claude đời mới bỏ tham số này —
-  đó là lý do `AnthropicClient` cố ý không gửi nó.)*
-- **`max_steps = 5`:** *phanh an toàn* chống lặp vô hạn (model lỡ gọi tool mãi không
-  dừng). Vì một câu hỏi có thể cần vài tool nối tiếp, ta cho ≥ số tool + dư một chút.
-- **Tắt "automatic function calling" của Gemini:** để **tự viết vòng lặp** trong
-  `agent.py`, nhờ vậy bạn **nhìn thấy** từng bước phối hợp tool, thay vì SDK làm giúp
-  rồi giấu đi (mục tiêu là để học).
-- **Máy tính dùng AST thay vì `eval()`:** `eval()` chạy được **mọi** câu lệnh Python
-  (kể cả xoá file) — cực nguy hiểm khi đầu vào do model sinh. Ta chỉ mở đúng các phép
-  toán cần thiết.
-- **`convert_currency` dùng bảng tỷ giá cố định:** để chạy **offline, không cần API
-  key** — học viên chạy được ngay; mục tiêu là dạy *điều phối tool*, không phải lấy
-  tỷ giá chính xác. Lên thực tế chỉ cần thay hàm bằng lời gọi API tỷ giá.
-- **Bọc mọi tool trong try/except:** tool lỗi thì trả lỗi **dưới dạng văn bản** để
-  agent đọc được và tự sửa, thay vì làm sập chương trình.
-- **Lịch sử hội thoại chuẩn hoá:** để **một** vòng lặp chạy được với **mọi** provider.
-- **Gemini cần replay `thought_signature`:** một "gotcha" thật của Gemini đời mới —
-  khi gửi lại function_call ở lượt sau phải kèm đúng "chữ ký suy nghĩ" model đã sinh,
-  nếu thiếu sẽ lỗi 400. Xem chú thích trong `providers.py`.
+Được xây dựng để học cách AI Agent thực sự điều phối công cụ — từng bước một.
 
----
+Nếu project hữu ích, hãy để lại một ⭐ để ủng hộ series.
 
-## 9. Lỗi thường gặp
-
-| Lỗi | Cách xử lý |
-|---|---|
-| `Thiếu GEMINI_API_KEY...` | Chưa tạo `.env` hoặc chưa dán key. Xem mục 3. |
-| `ModuleNotFoundError: anthropic/openai` | Provider đó chưa cài. Chạy lại `pip install -r requirements.txt`. |
-| `[Lỗi] Không tìm thấy file` khi đọc PDF | Kiểm tra lại đường dẫn file PDF bạn đưa cho agent. |
-| PDF "không trích được chữ" | File là ảnh scan — cần OCR (ngoài phạm vi bài này). |
-| `429 / 503` khi hỏi | Server LLM quá tải hoặc hết quota free tạm thời. Đợi chút rồi thử lại. |
-
----
-
-## 10. Bài tập mở rộng (cho học viên tự luyện)
-
-1. Thêm tool `get_current_time` (trả về giờ hiện tại) — tool **không cần tham số**.
-2. Thêm vài loại tiền vào bảng tỷ giá trong `convert_currency`.
-3. Cho agent **nhớ tên bạn** qua nhiều câu hỏi (trí nhớ nằm ở `agent.history`).
-4. Đổi `AGENT_MAX_STEPS` = 1 rồi hỏi câu cần 3 tool — quan sát điều gì xảy ra.
-5. **Nối lại với series RAG:** thêm tool `search_knowledge_base` gọi `RAGPipeline` từ
-   project RAG (`D:/HuyG-RAG-Series`) — khi đó agent vừa tra tài liệu, vừa tính toán,
-   vừa đổi tiền. (Chỉ cần thêm 1 `ToolSpec`, không đụng phần lõi.)
+</div>
