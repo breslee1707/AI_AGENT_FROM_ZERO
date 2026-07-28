@@ -17,23 +17,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
-from .tools import ToolRegistry
+from .prompts import DEFAULT_SYSTEM_PROMPT
+from .tools.registry import ToolRegistry
 
-# Prompt hệ thống: định hình "tính cách" và quy tắc làm việc của agent. Viết rõ ràng,
-# ngắn gọn; nêu KHI NÀO nên dùng tool nào để model quyết định đúng.
-SYSTEM_PROMPT = (
-    "Bạn là một trợ lý AI (AI Agent) làm việc bằng tiếng Việt. "
-    "Bạn được cấp một số công cụ (tool) và có thể TỰ QUYẾT ĐỊNH gọi chúng khi cần. "
-    "Với một yêu cầu phức tạp, hãy PHỐI HỢP nhiều tool theo trình tự hợp lý:\n"
-    "- Khi người dùng đưa đường dẫn file PDF, dùng `read_pdf` để lấy nội dung/số liệu.\n"
-    "- Khi cần tính toán con số, dùng `calculator` thay vì tự nhẩm (dễ sai).\n"
-    "- Khi cần đổi ngoại tệ, dùng `convert_currency`.\n"
-    "Ví dụ: 'đọc hoá đơn PDF, cộng các khoản rồi đổi sang USD' -> gọi lần lượt "
-    "read_pdf, calculator, rồi convert_currency.\n"
-    "Nếu câu hỏi đơn giản và không cần tool, cứ trả lời trực tiếp. "
-    "Luôn trả lời ngắn gọn, chính xác, bằng tiếng Việt. Nếu tool báo lỗi hoặc không có "
-    "dữ liệu, hãy nói thật, tuyệt đối không bịa."
-)
+# Backward-compatible import for code that previously used agent.SYSTEM_PROMPT.
+SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT
 
 
 @dataclass
@@ -61,7 +49,7 @@ class Agent:
         self,
         client,                       # một LLMClient từ providers.py
         registry: ToolRegistry,       # bộ tool agent được dùng
-        system_prompt: str = SYSTEM_PROMPT,
+        system_prompt: str = DEFAULT_SYSTEM_PROMPT,
         max_steps: int = 5,
     ):
         self.client = client

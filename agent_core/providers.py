@@ -25,7 +25,7 @@ import json
 from dataclasses import dataclass, field
 
 from .config import Settings
-from .tools import ToolSpec
+from .tools.base import ToolSpec
 
 
 @dataclass

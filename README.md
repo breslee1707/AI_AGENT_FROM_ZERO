@@ -74,9 +74,10 @@ flowchart TB
 
     subgraph C["Agent Core"]
         AGENT["🧠 Agent Loop<br/>agent.py"]
+        PROMPT["📝 Prompt Library<br/>prompts.py"]
         CONFIG["⚙️ Settings<br/>config.py"]
         ADAPTER["🔄 Provider Adapters<br/>providers.py"]
-        REGISTRY["🧰 Tool Registry<br/>tools.py"]
+        REGISTRY["🧰 Tool Package<br/>tools/"]
     end
 
     subgraph L["Nhà cung cấp LLM"]
@@ -97,6 +98,7 @@ flowchart TB
     CLI --> AGENT
     CONFIG -. cấu hình .-> WEB
     CONFIG -. cấu hình .-> CLI
+    PROMPT -. system prompt .-> AGENT
     AGENT <--> ADAPTER
     ADAPTER <--> GEMINI
     ADAPTER <--> CLAUDE
@@ -111,7 +113,7 @@ flowchart TB
     classDef provider fill:#FFF7ED,stroke:#EA580C,color:#7C2D12;
     classDef tool fill:#DCFCE7,stroke:#16A34A,color:#14532D;
     class WEB,CLI interface;
-    class AGENT,CONFIG,ADAPTER,REGISTRY core;
+    class AGENT,PROMPT,CONFIG,ADAPTER,REGISTRY core;
     class GEMINI,CLAUDE,OPENAI provider;
     class PDF,CALC,FX tool;
 ```
@@ -121,9 +123,10 @@ flowchart TB
 | Thành phần | Trách nhiệm |
 |---|---|
 | `app.py` | Hiển thị chat, trạng thái gọi tool, lịch sử và cấu hình đang dùng |
-| `agent_core/agent.py` | Chứa system prompt, lịch sử hội thoại và vòng lặp điều phối tool |
+| `agent_core/agent.py` | Quản lý lịch sử hội thoại và vòng lặp điều phối tool |
+| `agent_core/prompts.py` | Quản lý system prompt mặc định, tách khỏi logic điều phối |
 | `agent_core/providers.py` | Chuyển đổi định dạng chung sang API của Gemini, Anthropic và OpenAI |
-| `agent_core/tools.py` | Khai báo JSON Schema, đăng ký và thực thi các tool |
+| `agent_core/tools/` | Chứa kiểu dữ liệu chung, registry và implementation riêng của từng tool |
 | `agent_core/config.py` | Đọc `.env`, kiểm tra provider và API key đang hoạt động |
 | `scripts/chat_cli.py` | Chạy Agent trực tiếp trong terminal để thử nghiệm nhanh |
 
@@ -299,6 +302,22 @@ ANTHROPIC_MODEL=claude-haiku-4-5
 
 Project chỉ yêu cầu API key của provider đang được chọn; key của hai provider còn lại có thể để trống.
 
+### Quản lý prompt
+
+System prompt mặc định nằm riêng tại `agent_core/prompts.py`, giúp thay đổi chỉ dẫn cho model mà không chạm vào vòng lặp điều phối. Có thể sửa prompt mặc định cho toàn ứng dụng hoặc truyền một prompt khác khi khởi tạo Agent:
+
+```python
+from agent_core import Agent
+
+agent = Agent(
+    client=client,
+    registry=registry,
+    system_prompt="Bạn là trợ lý phân tích tài liệu và luôn trích dẫn nguồn.",
+)
+```
+
+Với nhiều persona hoặc use case, hãy khai báo thêm các hằng prompt trong `prompts.py` và chọn prompt tại composition root (`app.py` hoặc CLI), thay vì đặt chuỗi prompt rải rác trong code.
+
 <a id="bo-cong-cu"></a>
 ## Bộ công cụ mặc định
 
@@ -320,36 +339,45 @@ Project chỉ yêu cầu API key của provider đang được chọn; key của
 <a id="them-tool-moi"></a>
 ## Thêm tool mới
 
-Mỗi tool gồm bốn phần: tên, mô tả để model biết **khi nào nên gọi**, JSON Schema của tham số và hàm Python thực thi.
+Mỗi tool nằm trong một module riêng và gồm bốn phần: tên, mô tả để model biết **khi nào nên gọi**, JSON Schema của tham số và hàm Python thực thi.
 
-Ví dụ thêm tool xem giờ hiện tại vào `build_default_registry()` trong `agent_core/tools.py`:
+Ví dụ tạo `agent_core/tools/current_time.py`:
 
 ```python
 from datetime import datetime
 
-
-def get_current_time(timezone: str = "Asia/Ho_Chi_Minh") -> str:
-    # Đây là ví dụ tối giản; production nên xử lý timezone bằng zoneinfo.
-    return f"Múi giờ yêu cầu: {timezone}; giờ hệ thống: {datetime.now().isoformat()}"
+from .base import ToolSpec
 
 
-ToolSpec(
+def get_current_time() -> str:
+    return datetime.now().astimezone().isoformat()
+
+
+CURRENT_TIME_TOOL = ToolSpec(
     name="get_current_time",
     description="Trả về thời gian hiện tại khi người dùng hỏi ngày hoặc giờ.",
     parameters={
         "type": "object",
-        "properties": {
-            "timezone": {
-                "type": "string",
-                "description": "Tên múi giờ IANA, ví dụ Asia/Ho_Chi_Minh.",
-            }
-        },
+        "properties": {},
     },
     func=get_current_time,
 )
 ```
 
-Sau khi đăng ký, tool mới tự động xuất hiện trong sidebar và được chuyển sang định dạng phù hợp với provider đang dùng. Bạn không cần sửa `agent.py`.
+Sau đó đăng ký spec tại `agent_core/tools/defaults.py`:
+
+```python
+from .current_time import CURRENT_TIME_TOOL
+
+DEFAULT_TOOLS = (
+    PDF_READER_TOOL,
+    CALCULATOR_TOOL,
+    CURRENCY_TOOL,
+    CURRENT_TIME_TOOL,
+)
+```
+
+Tool mới sẽ tự động xuất hiện trong sidebar và được chuyển sang định dạng phù hợp với provider đang dùng. Bạn không cần sửa `agent.py`, provider adapters hay UI.
 
 <a id="cau-truc-thu-muc"></a>
 ## Cấu trúc thư mục
@@ -357,11 +385,19 @@ Sau khi đăng ký, tool mới tự động xuất hiện trong sidebar và đư
 ```text
 AI_AGENT_FROM_ZERO/
 ├── agent_core/
+│   ├── tools/
+│   │   ├── __init__.py      # Public API ổn định của tools package
+│   │   ├── base.py          # ToolSpec trung lập với provider
+│   │   ├── registry.py      # Đăng ký và thực thi tool an toàn
+│   │   ├── defaults.py      # Danh sách tool bật mặc định
+│   │   ├── calculator.py    # Máy tính giới hạn bằng AST
+│   │   ├── currency.py      # Quy đổi tiền tệ minh họa
+│   │   └── pdf_reader.py    # Trích xuất văn bản PDF
 │   ├── __init__.py          # Public API và phiên bản package
-│   ├── agent.py             # Vòng lặp Agent, prompt và lịch sử hội thoại
+│   ├── agent.py             # Vòng lặp Agent và lịch sử hội thoại
+│   ├── prompts.py           # System prompts dùng bởi Agent
 │   ├── config.py            # Đọc và kiểm tra cấu hình môi trường
-│   ├── providers.py         # Adapter Gemini / Anthropic / OpenAI
-│   └── tools.py             # ToolSpec, ToolRegistry và ba tool mặc định
+│   └── providers.py         # Adapter Gemini / Anthropic / OpenAI
 ├── scripts/
 │   └── chat_cli.py          # Giao diện dòng lệnh
 ├── app.py                   # Giao diện chat Streamlit
@@ -372,7 +408,7 @@ AI_AGENT_FROM_ZERO/
 └── README.md
 ```
 
-Để đọc code theo luồng dễ hiểu nhất: `config.py` → `tools.py` → `providers.py` → `agent.py` → `app.py`.
+Để đọc code theo luồng dễ hiểu nhất: `config.py` → `prompts.py` → `tools/` → `providers.py` → `agent.py` → `app.py`.
 
 <a id="gioi-han-va-an-toan"></a>
 ## Giới hạn và lưu ý an toàn
