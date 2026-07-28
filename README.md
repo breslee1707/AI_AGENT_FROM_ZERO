@@ -1,16 +1,18 @@
 <div align="center">
 
-# 🤖 AI Agent From Zero
+<img src="https://api.iconify.design/lucide/workflow.svg?color=%236E56CF" width="64" height="64" alt="Workflow orchestration" />
+
+# AI Agent From Zero
 
 ### Xây dựng AI Agent đa công cụ, đa nhà cung cấp LLM — từ những thành phần cơ bản nhất
 
 Một project Python nhỏ gọn giúp bạn nhìn rõ cách một AI Agent **suy luận → gọi tool → quan sát kết quả → trả lời**, thay vì để framework che giấu toàn bộ quá trình.
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.36%2B-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://streamlit.io/)
-[![LLM Providers](https://img.shields.io/badge/LLM-Gemini%20%7C%20Claude%20%7C%20OpenAI-6E56CF?style=for-the-badge)](#nha-cung-cap-llm)
-[![Architecture](https://img.shields.io/badge/Architecture-Provider--agnostic-0EA5E9?style=for-the-badge)](#kien-truc-he-thong)
-[![GitHub stars](https://img.shields.io/github/stars/breslee1707/AI_AGENT_FROM_ZERO?style=for-the-badge&logo=github&color=181717)](https://github.com/breslee1707/AI_AGENT_FROM_ZERO/stargazers)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.36%2B-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![LLM Providers](https://img.shields.io/badge/LLM-Gemini%20%7C%20Claude%20%7C%20OpenAI-6E56CF?style=flat-square)](#nha-cung-cap-llm)
+[![Architecture](https://img.shields.io/badge/Architecture-Provider--agnostic-0EA5E9?style=flat-square)](#kien-truc-he-thong)
+[![GitHub stars](https://img.shields.io/github/stars/breslee1707/AI_AGENT_FROM_ZERO?style=flat-square&logo=github&color=181717)](https://github.com/breslee1707/AI_AGENT_FROM_ZERO/stargazers)
 
 **[Bắt đầu nhanh](#bat-dau-nhanh) · [Kiến trúc](#kien-truc-he-thong) · [Cách hoạt động](#agent-hoat-dong-nhu-the-nao) · [Thêm tool](#them-tool-moi) · [Xử lý lỗi](#xu-ly-loi-thuong-gap)**
 
@@ -31,10 +33,10 @@ Agent có thể tự phối hợp ba tool theo đúng thứ tự:
 
 ```mermaid
 flowchart LR
-    Q["📨 Yêu cầu của người dùng"] --> PDF["📄 read_pdf<br/>Trích xuất số liệu"]
-    PDF --> CALC["🧮 calculator<br/>Tính tổng"]
-    CALC --> FX["💱 convert_currency<br/>Quy đổi tiền tệ"]
-    FX --> A["✅ Câu trả lời cuối"]
+    Q["Yêu cầu của người dùng"] --> PDF["read_pdf<br/>Trích xuất số liệu"]
+    PDF --> CALC["calculator<br/>Tính tổng"]
+    CALC --> FX["convert_currency<br/>Quy đổi tiền tệ"]
+    FX --> A["Câu trả lời cuối"]
 
     classDef input fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E,stroke-width:2px;
     classDef tool fill:#F3E8FF,stroke:#9333EA,color:#581C87,stroke-width:2px;
@@ -48,13 +50,13 @@ flowchart LR
 
 | Điểm nổi bật | Giá trị |
 |---|---|
-| 🔍 **Minh bạch** | Xem được tool nào đã được gọi, tham số và kết quả của từng bước |
-| 🔗 **Phối hợp nhiều tool** | Kết quả của tool trước trở thành dữ liệu cho quyết định tiếp theo |
-| 🔌 **Đa nhà cung cấp** | Dùng cùng một Agent với Gemini, Claude hoặc OpenAI |
-| 🧩 **Dễ mở rộng** | Thêm tool mới bằng một `ToolSpec`, không cần sửa vòng lặp Agent |
-| 🛡️ **Có lớp an toàn cơ bản** | Giới hạn số bước, bắt lỗi tool và máy tính không dùng `eval()` |
-| 🖥️ **Hai cách sử dụng** | Giao diện web Streamlit và CLI trong terminal |
-| 🧠 **Hội thoại nhiều lượt** | Agent giữ lịch sử cho đến khi người dùng đặt lại cuộc trò chuyện |
+| **Minh bạch** | Xem được tool nào đã được gọi, tham số và kết quả của từng bước |
+| **Phối hợp nhiều tool** | Kết quả của tool trước trở thành dữ liệu cho quyết định tiếp theo |
+| **Đa nhà cung cấp** | Dùng cùng một Agent với Gemini, Claude hoặc OpenAI |
+| **Dễ mở rộng** | Thêm tool mới bằng một `ToolSpec`, không cần sửa vòng lặp Agent |
+| **Có lớp an toàn cơ bản** | Giới hạn số bước, bắt lỗi tool và máy tính không dùng `eval()` |
+| **Hai cách sử dụng** | Giao diện web Streamlit và CLI trong terminal |
+| **Hội thoại nhiều lượt** | Agent giữ lịch sử cho đến khi người dùng đặt lại cuộc trò chuyện |
 
 > Đây là project học tập: code ưu tiên sự rõ ràng, dễ đọc và dễ thử nghiệm hơn độ phức tạp của một hệ thống production.
 
@@ -65,19 +67,19 @@ Project tách phần điều phối Agent khỏi SDK của từng hãng. Mọi p
 
 ```mermaid
 flowchart TB
-    U["👤 Người dùng"]
+    U["Người dùng"]
 
     subgraph I["Lớp giao diện"]
-        WEB["🖥️ Streamlit UI<br/>app.py"]
-        CLI["⌨️ Terminal CLI<br/>scripts/chat_cli.py"]
+        WEB["Streamlit UI<br/>app.py"]
+        CLI["Terminal CLI<br/>scripts/chat_cli.py"]
     end
 
     subgraph C["Agent Core"]
-        AGENT["🧠 Agent Loop<br/>agent.py"]
-        PROMPT["📝 Prompt Library<br/>prompts.py"]
-        CONFIG["⚙️ Settings<br/>config.py"]
-        ADAPTER["🔄 Provider Adapters<br/>providers.py"]
-        REGISTRY["🧰 Tool Package<br/>tools/"]
+        AGENT["Agent Loop<br/>agent.py"]
+        PROMPT["Prompt Library<br/>prompts.py"]
+        CONFIG["Settings<br/>config.py"]
+        ADAPTER["Provider Adapters<br/>providers.py"]
+        REGISTRY["Tool Package<br/>tools/"]
     end
 
     subgraph L["Nhà cung cấp LLM"]
@@ -87,9 +89,9 @@ flowchart TB
     end
 
     subgraph T["Công cụ mặc định"]
-        PDF["📄 read_pdf"]
-        CALC["🧮 calculator"]
-        FX["💱 convert_currency"]
+        PDF["read_pdf"]
+        CALC["calculator"]
+        FX["convert_currency"]
     end
 
     U --> WEB
@@ -223,7 +225,7 @@ GEMINI_API_KEY=your_api_key_here
 GEMINI_MODEL=gemini-flash-latest
 ```
 
-> 🔐 `.env` đã được thêm vào `.gitignore`. Không commit, chụp màn hình hoặc chia sẻ API key công khai.
+> **Bảo mật:** `.env` đã được thêm vào `.gitignore`. Không commit, chụp màn hình hoặc chia sẻ API key công khai.
 
 ### 4. Chạy ứng dụng
 
@@ -464,6 +466,6 @@ Khi thêm provider hoặc tool mới, hãy giữ interface chuẩn hóa hiện t
 
 Được xây dựng để học cách AI Agent thực sự điều phối công cụ — từng bước một.
 
-Nếu project hữu ích, hãy để lại một ⭐ để ủng hộ series.
+Nếu project hữu ích, hãy star repository để ủng hộ series.
 
 </div>
