@@ -51,6 +51,10 @@ class Settings:
     #   không tốn quota vô ích; Anthropic BẮT BUỘC tham số này nên ta luôn khai báo.
     max_tokens: int
 
+    # --- MCP: để trống MCP_CONFIG_PATH nếu chỉ muốn dùng tool Python nội bộ ---
+    mcp_config_path: str
+    mcp_tool_timeout_seconds: float
+
     # ---- Vài tiện ích đọc nhanh cấu hình của provider đang chọn ----
     @property
     def active_api_key(self) -> str:
@@ -97,6 +101,10 @@ def load_settings() -> Settings:
         temperature=float(os.getenv("AGENT_TEMPERATURE", "0.2")),
         max_steps=int(os.getenv("AGENT_MAX_STEPS", "5")),
         max_tokens=int(os.getenv("AGENT_MAX_TOKENS", "2048")),
+        mcp_config_path=os.getenv("MCP_CONFIG_PATH", "mcp_servers.json").strip(),
+        mcp_tool_timeout_seconds=float(
+            os.getenv("MCP_TOOL_TIMEOUT_SECONDS", "30")
+        ),
     )
 
     # Kiểm tra key của ĐÚNG provider đang chọn (các provider khác không cần key).

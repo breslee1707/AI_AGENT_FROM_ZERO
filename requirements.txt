@@ -14,3 +14,6 @@ openai>=1.40.0           # GPT/Codex — tuỳ chọn (cần key mới dùng đ�
 
 # --- Cần cho tool read_pdf ---
 pypdf>=4.0.0             # đọc nội dung file PDF
+
+# --- Kết nối tool từ MCP server ---
+mcp>=2.0.0,<3.0.0        # MCP Python SDK v2 — client discovery + tools/call

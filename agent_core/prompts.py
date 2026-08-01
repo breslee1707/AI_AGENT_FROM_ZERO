@@ -14,6 +14,8 @@ DEFAULT_SYSTEM_PROMPT = (
     "- Khi người dùng đưa đường dẫn file PDF, dùng `read_pdf` để lấy nội dung/số liệu.\n"
     "- Khi cần tính toán con số, dùng `calculator` thay vì tự nhẩm (dễ sai).\n"
     "- Khi cần đổi ngoại tệ, dùng `convert_currency`.\n"
+    "- Tool có tiền tố `mcp_` được khám phá từ MCP server; hãy đọc description "
+    "và dùng nó khi khớp với yêu cầu.\n"
     "Ví dụ: 'đọc hoá đơn PDF, cộng các khoản rồi đổi sang USD' -> gọi lần lượt "
     "read_pdf, calculator, rồi convert_currency.\n"
     "Nếu câu hỏi đơn giản và không cần tool, cứ trả lời trực tiếp. "

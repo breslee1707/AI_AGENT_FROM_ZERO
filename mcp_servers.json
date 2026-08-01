@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "workspace-tools": {
+      "command": "${PYTHON}",
+      "args": ["mcp_servers/workspace_server.py"],
+      "cwd": ".",
+      "env": {
+        "MCP_WORKSPACE_ROOT": "."
+      }
+    }
+  }
+}

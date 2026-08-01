@@ -17,7 +17,7 @@ import streamlit as st
 from agent_core.agent import Agent
 from agent_core.config import load_settings
 from agent_core.providers import build_client
-from agent_core.tools import build_default_registry
+from agent_core.runtime import build_tool_registry
 
 # ---------- Cấu hình trang ----------
 st.set_page_config(page_title="AI Agent + RAG", page_icon="🤖", layout="centered")
@@ -31,7 +31,7 @@ st.title("🤖 AI Agent (có dùng RAG làm tool)")
 def create_agent() -> Agent:
     settings = load_settings()             # đọc .env, có thể ném lỗi nếu thiếu key
     client = build_client(settings)        # chọn provider theo .env
-    registry = build_default_registry()    # 3 tool: read_pdf, calculator, convert_currency
+    registry = build_tool_registry(settings)  # tool Python nội bộ + tool MCP được khám phá
     return Agent(client, registry, max_steps=settings.max_steps)
 
 

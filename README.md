@@ -4,7 +4,7 @@
 
 # AI Agent From Zero
 
-### Xây dựng AI Agent đa công cụ, đa nhà cung cấp LLM — từ những thành phần cơ bản nhất
+### Xây dựng AI Agent đa công cụ, đa nhà cung cấp LLM và tự khám phá MCP tool
 
 Một project Python nhỏ gọn giúp bạn nhìn rõ cách một AI Agent **suy luận → gọi tool → quan sát kết quả → trả lời**, thay vì để framework che giấu toàn bộ quá trình.
 
@@ -54,6 +54,7 @@ flowchart LR
 | **Phối hợp nhiều tool** | Kết quả của tool trước trở thành dữ liệu cho quyết định tiếp theo |
 | **Đa nhà cung cấp** | Dùng cùng một Agent với Gemini, Claude hoặc OpenAI |
 | **Dễ mở rộng** | Thêm tool mới bằng một `ToolSpec`, không cần sửa vòng lặp Agent |
+| **Kết nối MCP** | Tự khám phá schema và gọi tool từ MCP server mà không hard-code vào Agent |
 | **Có lớp an toàn cơ bản** | Giới hạn số bước, bắt lỗi tool và máy tính không dùng `eval()` |
 | **Hai cách sử dụng** | Giao diện web Streamlit và CLI trong terminal |
 | **Hội thoại nhiều lượt** | Agent giữ lịch sử cho đến khi người dùng đặt lại cuộc trò chuyện |
@@ -94,6 +95,10 @@ flowchart TB
         FX["convert_currency"]
     end
 
+    subgraph M["MCP server bên ngoài"]
+        MCP["workspace-tools<br/>tools/list + tools/call"]
+    end
+
     U --> WEB
     U --> CLI
     WEB --> AGENT
@@ -109,6 +114,7 @@ flowchart TB
     REGISTRY --> PDF
     REGISTRY --> CALC
     REGISTRY --> FX
+    MCP <--> REGISTRY
 
     classDef interface fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E;
     classDef core fill:#F3E8FF,stroke:#9333EA,color:#581C87;
@@ -118,6 +124,7 @@ flowchart TB
     class AGENT,PROMPT,CONFIG,ADAPTER,REGISTRY core;
     class GEMINI,CLAUDE,OPENAI provider;
     class PDF,CALC,FX tool;
+    class MCP tool;
 ```
 
 ### Vai trò của từng thành phần
@@ -129,6 +136,8 @@ flowchart TB
 | `agent_core/prompts.py` | Quản lý system prompt mặc định, tách khỏi logic điều phối |
 | `agent_core/providers.py` | Chuyển đổi định dạng chung sang API của Gemini, Anthropic và OpenAI |
 | `agent_core/tools/` | Chứa kiểu dữ liệu chung, registry và implementation riêng của từng tool |
+| `agent_core/mcp_client.py` | Giữ kết nối MCP, khám phá schema và chuyển MCP tool thành `ToolSpec` |
+| `agent_core/runtime.py` | Ghép tool Python nội bộ với tool được khám phá từ MCP server |
 | `agent_core/config.py` | Đọc `.env`, kiểm tra provider và API key đang hoạt động |
 | `scripts/chat_cli.py` | Chạy Agent trực tiếp trong terminal để thử nghiệm nhanh |
 
@@ -247,6 +256,12 @@ CLI — trò chuyện liên tục:
 python scripts/chat_cli.py
 ```
 
+Kiểm tra riêng MCP bridge, không cần API key:
+
+```bash
+python scripts/inspect_mcp.py
+```
+
 <a id="cach-su-dung"></a>
 ## Cách sử dụng
 
@@ -260,6 +275,7 @@ Thử các prompt sau để quan sát cách Agent chọn và phối hợp công 
 | `Đọc file D:/Documents/hoa-don.pdf và tóm tắt nội dung` | `read_pdf` |
 | `Đọc hóa đơn PDF, cộng các khoản rồi đổi sang USD` | `read_pdf` → `calculator` → `convert_currency` |
 | `Xin chào, bạn có thể làm gì?` | Trả lời trực tiếp, không cần tool |
+| `Tìm file trùng trong mcp_servers/demo_assets` | MCP `find_duplicate_files` |
 
 Trong giao diện Streamlit:
 
@@ -301,6 +317,8 @@ ANTHROPIC_MODEL=claude-haiku-4-5
 | `AGENT_TEMPERATURE` | `0.2` | Độ ngẫu nhiên thấp để quyết định gọi tool ổn định hơn |
 | `AGENT_MAX_STEPS` | `5` | Số vòng suy luận tối đa cho mỗi yêu cầu |
 | `AGENT_MAX_TOKENS` | `2048` | Giới hạn token đầu ra mỗi lượt ở adapter có sử dụng giá trị này |
+| `MCP_CONFIG_PATH` | `mcp_servers.json` | File khai báo các MCP server; để trống để tắt MCP |
+| `MCP_TOOL_TIMEOUT_SECONDS` | `30` | Thời gian tối đa chờ một MCP tool trả kết quả |
 
 Project chỉ yêu cầu API key của provider đang được chọn; key của hai provider còn lại có thể để trống.
 
@@ -328,6 +346,62 @@ Với nhiều persona hoặc use case, hãy khai báo thêm các hằng prompt t
 | `read_pdf` | `path`, `max_chars` | Trích xuất văn bản từ PDF cục bộ | Mặc định lấy 4.000 ký tự đầu; không OCR file scan |
 | `calculator` | `expression` | Tính biểu thức số học bằng AST | Chỉ cho phép số và các toán tử cơ bản |
 | `convert_currency` | `amount`, `from_currency`, `to_currency` | Quy đổi USD, VND, EUR, JPY, GBP, CNY | Dùng bảng tỷ giá minh họa cố định, không phải dữ liệu thời gian thực |
+| `mcp_workspace-tools__find_duplicate_files` | `subfolder`, `min_size_kb` | Tìm file trùng qua MCP server mẫu | Read-only, chỉ đọc bên trong workspace đã cấu hình |
+
+<a id="mcp-tool-discovery"></a>
+## Cho Agent tự khám phá MCP tool
+
+Ba tool Python ban đầu vẫn được đăng ký trực tiếp bằng `ToolSpec`. Phần MCP bổ sung
+một đường khác: Agent đọc `mcp_servers.json`, khởi động server `stdio`, gửi
+`tools/list`, rồi chuyển schema nhận được thành `ToolSpec`. Vì vậy `agent.py` và các
+provider adapter không cần biết tool đến từ Python nội bộ hay từ MCP.
+
+```mermaid
+sequenceDiagram
+    participant Host as AI Agent Host
+    participant Client as MCP Client Bridge
+    participant Server as workspace-tools
+    participant Registry as ToolRegistry
+
+    Host->>Client: Đọc mcp_servers.json
+    Client->>Server: Khởi động subprocess + kết nối stdio
+    Client->>Server: tools/list
+    Server-->>Client: name + description + JSON Schema
+    Client->>Registry: Đăng ký ToolSpec động
+    Registry->>Client: Gọi tool với arguments
+    Client->>Server: tools/call
+    Server-->>Client: content + structured_content
+```
+
+Config mẫu dùng `${PYTHON}` để luôn chạy server bằng đúng Python interpreter đang
+chạy Agent:
+
+```json
+{
+  "mcpServers": {
+    "workspace-tools": {
+      "command": "${PYTHON}",
+      "args": ["mcp_servers/workspace_server.py"],
+      "cwd": ".",
+      "env": {"MCP_WORKSPACE_ROOT": "."}
+    }
+  }
+}
+```
+
+Chạy vòng discovery và tool call thật mà không gọi model:
+
+```bash
+python scripts/inspect_mcp.py
+```
+
+Tên MCP tool được namespace theo server, ví dụ
+`mcp_workspace-tools__find_duplicate_files`. Điều này tránh hai server cùng khai
+báo một tool tên `search` rồi âm thầm ghi đè nhau.
+
+> **An toàn:** MCP config có thể khởi động command trên máy. Chỉ thêm server mà bạn
+> tin cậy, kiểm tra `command`, `args`, `cwd` và chỉ truyền đúng biến môi trường cần
+> thiết. Server mẫu là read-only và từ chối đường dẫn đi ra ngoài workspace.
 
 ### Một số quyết định thiết kế
 
@@ -399,9 +473,17 @@ AI_AGENT_FROM_ZERO/
 │   ├── agent.py             # Vòng lặp Agent và lịch sử hội thoại
 │   ├── prompts.py           # System prompts dùng bởi Agent
 │   ├── config.py            # Đọc và kiểm tra cấu hình môi trường
+│   ├── mcp_client.py        # Kết nối, discovery và gọi MCP tool
+│   ├── runtime.py           # Ghép local tools với MCP tools
 │   └── providers.py         # Adapter Gemini / Anthropic / OpenAI
+├── mcp_servers/
+│   ├── workspace_server.py  # MCP server read-only dùng trong demo
+│   └── demo_assets/         # Dữ liệu mẫu có hai file trùng nội dung
+├── tests/                   # Contract test in-memory và stdio
 ├── scripts/
-│   └── chat_cli.py          # Giao diện dòng lệnh
+│   ├── chat_cli.py          # Giao diện dòng lệnh
+│   └── inspect_mcp.py       # Test MCP bridge không cần API key
+├── mcp_servers.json         # Command khởi động các MCP server
 ├── app.py                   # Giao diện chat Streamlit
 ├── run.ps1                  # Cài đặt và chạy nhanh trên Windows
 ├── requirements.txt         # Python dependencies
@@ -420,6 +502,7 @@ AI_AGENT_FROM_ZERO/
 - Đường dẫn PDF được Agent mở trên chính máy đang chạy ứng dụng; chỉ sử dụng file bạn tin cậy.
 - Nội dung PDF được gửi tới provider LLM trong lịch sử hội thoại. Không dùng tài liệu nhạy cảm nếu chưa đánh giá chính sách dữ liệu của provider.
 - Project chưa có sandbox riêng cho tool tùy chỉnh. Hãy kiểm tra chặt input và quyền truy cập khi thêm tool có tác động hệ thống.
+- `mcp_servers.json` có quyền khởi động subprocess; không chạy config MCP nhận từ nguồn không tin cậy.
 - Lịch sử nằm trong bộ nhớ tiến trình, chưa được lưu bền vững sau khi ứng dụng khởi động lại.
 
 <a id="xu-ly-loi-thuong-gap"></a>
@@ -444,7 +527,7 @@ AI_AGENT_FROM_ZERO/
 - [ ] Kết nối `search_knowledge_base` để biến pipeline RAG thành một tool.
 - [ ] Lưu lịch sử hội thoại vào SQLite.
 - [ ] Thêm timeout, retry và telemetry cho mỗi lần gọi tool.
-- [ ] Viết unit test cho `calculator`, `ToolRegistry` và vòng lặp Agent.
+- [ ] Viết thêm unit test cho `calculator`, `ToolRegistry` và vòng lặp Agent.
 - [ ] Chạy tool trong sandbox trước khi dùng cho môi trường production.
 
 <a id="dong-gop"></a>

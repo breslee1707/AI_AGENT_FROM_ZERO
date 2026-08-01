@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
+from .base import ToolSpec
 from .calculator import CALCULATOR_TOOL
 from .currency import CURRENCY_TOOL
 from .pdf_reader import PDF_READER_TOOL
@@ -15,6 +18,6 @@ DEFAULT_TOOLS = (
 )
 
 
-def build_default_registry() -> ToolRegistry:
-    """Build a registry containing the project's default tool set."""
-    return ToolRegistry(list(DEFAULT_TOOLS))
+def build_default_registry(extra_tools: Iterable[ToolSpec] = ()) -> ToolRegistry:
+    """Build a registry containing local tools plus optional external tools."""
+    return ToolRegistry([*DEFAULT_TOOLS, *extra_tools])
