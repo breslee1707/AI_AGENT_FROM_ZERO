@@ -27,6 +27,30 @@ class DemoProviderTests(unittest.TestCase):
         self.assertIn("config-backup.json", result.text)
         self.assertIn("MCP discovery và tool call vẫn chạy thật", result.text)
 
+    def test_confirmation_selects_recoverable_trash_tool(self) -> None:
+        provider = MCPToolProvider.from_config(PROJECT_ROOT / "mcp_servers.json")
+        try:
+            reply = DemoClient().complete(
+                "",
+                [
+                    {
+                        "role": "user",
+                        "content": (
+                            "Xác nhận dọn file trùng trong "
+                            "mcp_servers/demo_assets"
+                        ),
+                    }
+                ],
+                provider.specs(),
+            )
+        finally:
+            provider.close()
+
+        self.assertEqual(len(reply.tool_calls), 1)
+        call = reply.tool_calls[0]
+        self.assertTrue(call["name"].endswith("__trash_duplicate_files"))
+        self.assertEqual(call["args"]["confirmation"], "MOVE_DUPLICATES_TO_TRASH")
+
 
 if __name__ == "__main__":
     unittest.main()

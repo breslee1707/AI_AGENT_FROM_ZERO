@@ -292,6 +292,7 @@ Thử các prompt sau để quan sát cách Agent chọn và phối hợp công 
 | `Đọc hóa đơn PDF, cộng các khoản rồi đổi sang USD` | `read_pdf` → `calculator` → `convert_currency` |
 | `Xin chào, bạn có thể làm gì?` | Trả lời trực tiếp, không cần tool |
 | `Tìm file trùng trong mcp_servers/demo_assets` | MCP `find_duplicate_files` |
+| `Xác nhận dọn file trùng trong mcp_servers/demo_assets` | MCP `trash_duplicate_files`, chỉ sau bước xem trước |
 
 Trong giao diện Streamlit:
 
@@ -299,6 +300,7 @@ Trong giao diện Streamlit:
 2. Trạng thái xử lý cập nhật ngay khi Agent gọi hoặc nhận kết quả từ tool.
 3. Mỗi câu trả lời có thể mở rộng để xem toàn bộ dấu vết thực thi.
 4. Nút **“Xóa hội thoại”** đặt lại cả lịch sử giao diện và bộ nhớ của Agent.
+5. Sau khi tìm file trùng, app hiện bước xác nhận riêng; chưa bấm thì chưa có file nào thay đổi.
 
 <a id="nha-cung-cap-llm"></a>
 ## Nhà cung cấp LLM
@@ -369,6 +371,7 @@ Với nhiều persona hoặc use case, hãy khai báo thêm các hằng prompt t
 | `calculator` | `expression` | Tính biểu thức số học bằng AST | Chỉ cho phép số và các toán tử cơ bản |
 | `convert_currency` | `amount`, `from_currency`, `to_currency` | Quy đổi USD, VND, EUR, JPY, GBP, CNY | Dùng bảng tỷ giá minh họa cố định, không phải dữ liệu thời gian thực |
 | `mcp_workspace-tools__find_duplicate_files` | `subfolder`, `min_size_kb` | Tìm file trùng qua MCP server mẫu | Read-only, chỉ đọc bên trong workspace đã cấu hình |
+| `mcp_workspace-tools__trash_duplicate_files` | `subfolder`, `confirmation` | Giữ một bản và chuyển bản trùng vào thùng rác hệ điều hành | Bắt buộc xác nhận; không xóa vĩnh viễn; không ra ngoài workspace |
 
 <a id="mcp-tool-discovery"></a>
 ## Cho Agent tự khám phá MCP tool
@@ -423,7 +426,8 @@ báo một tool tên `search` rồi âm thầm ghi đè nhau.
 
 > **An toàn:** MCP config có thể khởi động command trên máy. Chỉ thêm server mà bạn
 > tin cậy, kiểm tra `command`, `args`, `cwd` và chỉ truyền đúng biến môi trường cần
-> thiết. Server mẫu là read-only và từ chối đường dẫn đi ra ngoài workspace.
+> thiết. Server mẫu từ chối đường dẫn đi ra ngoài workspace. Tool dọn file
+> bắt buộc xác nhận và chỉ chuyển bản dư vào thùng rác có thể khôi phục.
 
 ### Một số quyết định thiết kế
 
@@ -499,7 +503,7 @@ AI_AGENT_FROM_ZERO/
 │   ├── runtime.py           # Ghép local tools với MCP tools
 │   └── providers.py         # Adapter Gemini / Anthropic / OpenAI
 ├── mcp_servers/
-│   ├── workspace_server.py  # MCP server read-only dùng trong demo
+│   ├── workspace_server.py  # MCP server tìm và dọn file trùng an toàn
 │   └── demo_assets/         # Dữ liệu mẫu có hai file trùng nội dung
 ├── tests/                   # Contract test in-memory và stdio
 ├── scripts/
@@ -525,6 +529,8 @@ AI_AGENT_FROM_ZERO/
 - Nội dung PDF được gửi tới provider LLM trong lịch sử hội thoại. Không dùng tài liệu nhạy cảm nếu chưa đánh giá chính sách dữ liệu của provider.
 - Project chưa có sandbox riêng cho tool tùy chỉnh. Hãy kiểm tra chặt input và quyền truy cập khi thêm tool có tác động hệ thống.
 - `mcp_servers.json` có quyền khởi động subprocess; không chạy config MCP nhận từ nguồn không tin cậy.
+- Tool dọn file phải có chuỗi xác nhận chính xác, giữ bản đầu tiên theo thứ tự tên và
+  dùng thùng rác của hệ điều hành thay vì xóa vĩnh viễn.
 - Lịch sử nằm trong bộ nhớ tiến trình, chưa được lưu bền vững sau khi ứng dụng khởi động lại.
 
 <a id="xu-ly-loi-thuong-gap"></a>

@@ -70,6 +70,34 @@ class DemoClient:
 
         question = latest["content"]
         normalized = question.casefold()
+        subfolder = self._extract_subfolder(question)
+
+        if any(keyword in normalized for keyword in ("xác nhận", "confirm")):
+            tool = next(
+                (
+                    spec
+                    for spec in tools
+                    if spec.name.endswith("__trash_duplicate_files")
+                ),
+                None,
+            )
+            if tool is None:
+                return NormalizedReply(
+                    text="Demo cần MCP tool `trash_duplicate_files` nhưng chưa tìm thấy."
+                )
+            return NormalizedReply(
+                tool_calls=[
+                    {
+                        "id": "demo_trash_1",
+                        "name": tool.name,
+                        "args": {
+                            "subfolder": subfolder,
+                            "confirmation": "MOVE_DUPLICATES_TO_TRASH",
+                        },
+                    }
+                ]
+            )
+
         if any(
             keyword in normalized
             for keyword in ("file trùng", "trùng lặp", "duplicate")
@@ -87,12 +115,6 @@ class DemoClient:
                     text="Demo cần MCP tool `find_duplicate_files` nhưng chưa tìm thấy."
                 )
 
-            match = re.search(
-                r"(?:trong(?:\s+thư mục)?|thư mục)\s+[`'\"]?([A-Za-z0-9_./\\-]+)",
-                question,
-                flags=re.IGNORECASE,
-            )
-            subfolder = match.group(1) if match else "mcp_servers/demo_assets"
             return NormalizedReply(
                 tool_calls=[
                     {
@@ -111,6 +133,16 @@ class DemoClient:
         )
 
     @staticmethod
+    def _extract_subfolder(question: str) -> str:
+        match = re.search(
+            r"(?:trong(?:\s+(?:thư mục|folder))?|thư mục|folder)\s+"
+            r"[`'\"]?([A-Za-z0-9_./\\-]+)",
+            question,
+            flags=re.IGNORECASE,
+        )
+        return match.group(1) if match else "mcp_servers/demo_assets"
+
+    @staticmethod
     def _answer_from_tool(message: dict) -> NormalizedReply:
         content = message.get("content", "")
         if content.startswith("[Lỗi"):
@@ -118,6 +150,23 @@ class DemoClient:
 
         try:
             payload = json.loads(content)
+            if message.get("name", "").endswith("__trash_duplicate_files"):
+                moved = payload.get("moved_files", [])
+                kept = payload.get("kept_files", [])
+                if not moved:
+                    return NormalizedReply(text="Không có bản trùng nào cần chuyển.")
+                rendered_moved = ", ".join(f"`{name}`" for name in moved)
+                rendered_kept = ", ".join(f"`{name}`" for name in kept)
+                return NormalizedReply(
+                    text=(
+                        f"Đã giữ {rendered_kept} và chuyển {rendered_moved} "
+                        "vào thùng rác của hệ điều hành. "
+                        "Bạn vẫn có thể khôi phục file nếu cần.\n\n"
+                        "_Quyết định của model đang được mô phỏng; "
+                        "MCP tool và thao tác file đã chạy thật._"
+                    )
+                )
+
             groups = payload.get("groups", [])
             total_groups = payload.get("total_groups", len(groups))
             reclaimable = payload.get("total_reclaimable_bytes", 0)
@@ -133,6 +182,7 @@ class DemoClient:
             text=(
                 f"Đã tìm thấy {total_groups} nhóm file trùng: {rendered_files}. "
                 f"Nếu giữ lại một bản, có thể giải phóng {reclaimable} byte.\n\n"
+                "_Chưa có file nào bị thay đổi. Hãy xác nhận trước khi dọn._\n\n"
                 "_Quyết định của model đang được mô phỏng; MCP discovery và tool call "
                 "vẫn chạy thật._"
             )

@@ -6,6 +6,7 @@ streamlit>=1.36.0        # dựng web UI bằng Python thuần
 
 # --- Tiện ích ---
 python-dotenv>=1.0.0     # đọc biến môi trường từ file .env
+send2trash>=1.8.3        # chuyển file vào Recycle Bin/Trash, không xóa vĩnh viễn
 
 # --- Nhà cung cấp LLM (chỉ cái bạn dùng mới thực sự cần key) ---
 google-genai>=1.0.0      # Gemini — provider MẶC ĐỊNH của series
