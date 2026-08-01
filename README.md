@@ -84,6 +84,7 @@ flowchart TB
     end
 
     subgraph L["Nhà cung cấp LLM"]
+        DEMO["Demo deterministic<br/>không cần API key"]
         GEMINI["Gemini"]
         CLAUDE["Claude"]
         OPENAI["OpenAI"]
@@ -108,6 +109,7 @@ flowchart TB
     PROMPT -. system prompt .-> AGENT
     AGENT <--> ADAPTER
     ADAPTER <--> GEMINI
+    ADAPTER <--> DEMO
     ADAPTER <--> CLAUDE
     ADAPTER <--> OPENAI
     AGENT <--> REGISTRY
@@ -122,7 +124,7 @@ flowchart TB
     classDef tool fill:#DCFCE7,stroke:#16A34A,color:#14532D;
     class WEB,CLI interface;
     class AGENT,PROMPT,CONFIG,ADAPTER,REGISTRY core;
-    class GEMINI,CLAUDE,OPENAI provider;
+    class DEMO,GEMINI,CLAUDE,OPENAI provider;
     class PDF,CALC,FX tool;
     class MCP tool;
 ```
@@ -176,7 +178,8 @@ sequenceDiagram
 ### Yêu cầu
 
 - Python **3.10+**
-- Một API key của **Gemini**, **Anthropic** hoặc **OpenAI**
+- Không cần API key nếu dùng chế độ `demo`
+- API key của **Gemini**, **Anthropic** hoặc **OpenAI** chỉ cần khi dùng model thật
 - Git và PowerShell nếu dùng script cài đặt nhanh trên Windows
 
 ### 1. Clone repository
@@ -195,7 +198,8 @@ cd AI_AGENT_FROM_ZERO
 .\run.ps1
 ```
 
-Script sẽ tạo `.venv`, cài dependencies, tạo `.env` từ file mẫu nếu cần và mở Streamlit. Lần chạy đầu tiên, hãy điền API key vào `.env` rồi chạy lại script.
+Script sẽ tạo `.venv`, cài dependencies, tạo `.env` ở chế độ `demo` và mở
+Streamlit. Bạn có thể chạy ngay mà không cần API key.
 
 </details>
 
@@ -223,7 +227,19 @@ cp .env.example .env
 
 </details>
 
-### 3. Cấu hình API key
+### 3. Chạy demo không cần API key
+
+Mặc định `.env.example` đã chọn provider mô phỏng:
+
+```dotenv
+LLM_PROVIDER=demo
+```
+
+Trong chế độ này, quyết định của model và câu trả lời cuối được dựng cố định để
+video, tutorial và test luôn cho cùng một kết quả. MCP server, `tools/list`,
+`tools/call`, kiểm tra path và logic tìm file trùng vẫn chạy bằng code thật.
+
+Khi muốn dùng model thật, đổi provider và điền key tương ứng:
 
 Mở `.env`, chọn một provider và điền key tương ứng:
 
@@ -247,7 +263,7 @@ streamlit run app.py
 CLI — hỏi một câu rồi thoát:
 
 ```bash
-python scripts/chat_cli.py "15% của 2.000.000 là bao nhiêu, rồi đổi sang USD?"
+python scripts/chat_cli.py "Tìm file trùng trong mcp_servers/demo_assets"
 ```
 
 CLI — trò chuyện liên tục:
@@ -291,6 +307,7 @@ Chỉ cần đổi `LLM_PROVIDER` trong `.env`; vòng lặp Agent và các tool 
 
 | Provider | Giá trị cấu hình | Biến API key | Model mặc định trong project |
 |---|---|---|---|
+| Demo ổn định | `demo` | Không cần | `deterministic-demo` |
 | Google Gemini | `gemini` | `GEMINI_API_KEY` | `gemini-flash-latest` |
 | Anthropic Claude | `anthropic` | `ANTHROPIC_API_KEY` | `claude-opus-4-8` |
 | OpenAI | `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` |
@@ -305,12 +322,16 @@ ANTHROPIC_MODEL=claude-haiku-4-5
 
 > Tên model, quyền truy cập và chi phí phụ thuộc tài khoản của từng nhà cung cấp. Nếu model mặc định không khả dụng, hãy đổi biến `*_MODEL` sang model mà tài khoản của bạn được cấp.
 
+> `demo` không giả làm model thật: giao diện và câu trả lời đều ghi rõ phần quyết
+> định đang được mô phỏng. Chế độ này chỉ hỗ trợ kịch bản tìm file trùng dùng trong
+> tutorial; chuyển sang provider thật để xử lý câu hỏi tự do.
+
 <a id="cau-hinh"></a>
 ## Cấu hình
 
 | Biến | Mặc định | Mô tả |
 |---|---:|---|
-| `LLM_PROVIDER` | `gemini` | Provider đang hoạt động: `gemini`, `anthropic` hoặc `openai` |
+| `LLM_PROVIDER` | `demo` | Provider đang hoạt động: `demo`, `gemini`, `anthropic` hoặc `openai` |
 | `GEMINI_MODEL` | `gemini-flash-latest` | Model dùng bởi Gemini adapter |
 | `ANTHROPIC_MODEL` | `claude-opus-4-8` | Model dùng bởi Anthropic adapter |
 | `OPENAI_MODEL` | `gpt-4o-mini` | Model dùng bởi OpenAI adapter |
@@ -320,7 +341,8 @@ ANTHROPIC_MODEL=claude-haiku-4-5
 | `MCP_CONFIG_PATH` | `mcp_servers.json` | File khai báo các MCP server; để trống để tắt MCP |
 | `MCP_TOOL_TIMEOUT_SECONDS` | `30` | Thời gian tối đa chờ một MCP tool trả kết quả |
 
-Project chỉ yêu cầu API key của provider đang được chọn; key của hai provider còn lại có thể để trống.
+Provider `demo` không yêu cầu key. Với provider thật, project chỉ kiểm tra API key
+của provider đang được chọn; các key còn lại có thể để trống.
 
 ### Quản lý prompt
 
@@ -510,6 +532,7 @@ AI_AGENT_FROM_ZERO/
 
 | Hiện tượng | Nguyên nhân thường gặp | Cách xử lý |
 |---|---|---|
+| Không có API key | Chưa có tài khoản/quota của provider thật | Đặt `LLM_PROVIDER=demo` để chạy kịch bản tutorial |
 | `Thiếu ..._API_KEY` | Chưa tạo `.env` hoặc chọn sai provider | Sao chép `.env.example`, điền key và kiểm tra `LLM_PROVIDER` |
 | `ModuleNotFoundError` | Chưa cài dependencies hoặc chưa kích hoạt `.venv` | Kích hoạt môi trường ảo rồi chạy `pip install -r requirements.txt` |
 | `Không tìm thấy file` | Đường dẫn PDF sai hoặc app không có quyền đọc | Dùng đường dẫn tuyệt đối và kiểm tra quyền truy cập |

@@ -41,8 +41,17 @@ try:
     agent = create_agent()
 except Exception as e:  # noqa: BLE001
     st.error(f"❌ Chưa chạy được agent:\n\n{e}")
-    st.info("Gợi ý: sao chép `.env.example` thành `.env` rồi điền API key, xem README.md.")
+    st.info(
+        "Gợi ý: dùng `LLM_PROVIDER=demo` để chạy không cần API key, "
+        "hoặc điền key của provider thật."
+    )
     st.stop()
+
+if settings.provider == "demo":
+    st.info(
+        "🧪 Chế độ demo: quyết định của model được mô phỏng để output ổn định; "
+        "MCP discovery và tool call vẫn chạy thật."
+    )
 
 
 # ---------- Thanh bên: cho biết đang dùng provider/model nào + nút xoá hội thoại ----------

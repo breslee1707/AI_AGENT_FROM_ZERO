@@ -20,7 +20,7 @@ pip install -r requirements.txt
 # 4) Nhắc tạo .env nếu chưa có
 if (-not (Test-Path ".env")) {
     Copy-Item .env.example .env
-    Write-Host "Da tao .env tu .env.example — hay mo ra dien API key!" -ForegroundColor Yellow
+    Write-Host "Da tao .env o che do demo — khong can API key." -ForegroundColor Yellow
 }
 
 # 5) Mở giao diện chat

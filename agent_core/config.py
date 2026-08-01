@@ -4,9 +4,8 @@
 chỗ duy nhất, các module khác chỉ nhận `Settings` mà không cần biết biến môi trường
 nằm ở đâu. Nhờ vậy đổi provider / đổi model chỉ cần sửa .env, không đụng vào code.
 
-Điểm mới so với bài RAG: agent này hỗ trợ NHIỀU nhà cung cấp LLM (provider). Bạn chỉ
-cần điền key của provider mình có (Gemini / Claude / OpenAI) rồi đặt LLM_PROVIDER cho
-đúng. Mặc định dùng Gemini vì nó tái sử dụng luôn API key của project RAG.
+Điểm mới so với bài RAG: agent này hỗ trợ NHIỀU nhà cung cấp LLM (provider). Chế độ
+``demo`` mặc định không cần API key; Gemini / Claude / OpenAI dùng khi bạn có key thật.
 """
 
 from __future__ import annotations
@@ -28,7 +27,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 class Settings:
     """Toàn bộ cấu hình của agent, gom về một chỗ (immutable cho an toàn)."""
 
-    # --- Chọn nhà cung cấp LLM đang dùng: "gemini" | "anthropic" | "openai" ---
+    # --- Chọn provider: "demo" | "gemini" | "anthropic" | "openai" ---
     provider: str
 
     # --- API key + tên model cho TỪNG provider (chỉ cái đang chọn mới bắt buộc) ---
@@ -59,6 +58,7 @@ class Settings:
     @property
     def active_api_key(self) -> str:
         return {
+            "demo": "",
             "gemini": self.gemini_api_key,
             "anthropic": self.anthropic_api_key,
             "openai": self.openai_api_key,
@@ -67,6 +67,7 @@ class Settings:
     @property
     def active_model(self) -> str:
         return {
+            "demo": "deterministic-demo",
             "gemini": self.gemini_model,
             "anthropic": self.anthropic_model,
             "openai": self.openai_model,
@@ -76,14 +77,14 @@ class Settings:
 def load_settings() -> Settings:
     """Đọc cấu hình từ môi trường và trả về đối tượng Settings.
 
-    Ném lỗi RÕ RÀNG nếu thiếu key của provider đang chọn — để bạn biết ngay phải làm gì.
+    Ném lỗi RÕ RÀNG nếu provider thật thiếu key; ``demo`` không cần key.
     """
     # .strip().lower() để tránh lỗi vặt do gõ dư dấu cách hoặc viết HOA trong .env
-    provider = os.getenv("LLM_PROVIDER", "gemini").strip().lower()
-    if provider not in {"gemini", "anthropic", "openai"}:
+    provider = os.getenv("LLM_PROVIDER", "demo").strip().lower()
+    if provider not in {"demo", "gemini", "anthropic", "openai"}:
         raise RuntimeError(
             f"LLM_PROVIDER='{provider}' không hợp lệ. "
-            "Chỉ nhận: gemini | anthropic | openai (sửa trong .env)."
+            "Chỉ nhận: demo | gemini | anthropic | openai (sửa trong .env)."
         )
 
     settings = Settings(
@@ -108,7 +109,7 @@ def load_settings() -> Settings:
     )
 
     # Kiểm tra key của ĐÚNG provider đang chọn (các provider khác không cần key).
-    if not settings.active_api_key:
+    if provider != "demo" and not settings.active_api_key:
         env_name = {
             "gemini": "GEMINI_API_KEY",
             "anthropic": "ANTHROPIC_API_KEY",
