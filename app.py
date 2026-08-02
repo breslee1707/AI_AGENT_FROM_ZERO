@@ -17,7 +17,7 @@ import streamlit as st
 from agent_core.agent import Agent
 from agent_core.config import load_settings
 from agent_core.providers import build_client
-from agent_core.tools import build_default_registry
+from agent_core.runtime import build_tool_registry
 
 # ---------- Cấu hình trang ----------
 st.set_page_config(page_title="AI Agent + RAG", page_icon="🤖", layout="centered")
@@ -31,7 +31,7 @@ st.title("🤖 AI Agent (có dùng RAG làm tool)")
 def create_agent() -> Agent:
     settings = load_settings()             # đọc .env, có thể ném lỗi nếu thiếu key
     client = build_client(settings)        # chọn provider theo .env
-    registry = build_default_registry()    # 3 tool: read_pdf, calculator, convert_currency
+    registry = build_tool_registry(settings)  # tool Python nội bộ + tool MCP được khám phá
     return Agent(client, registry, max_steps=settings.max_steps)
 
 
@@ -41,8 +41,17 @@ try:
     agent = create_agent()
 except Exception as e:  # noqa: BLE001
     st.error(f"❌ Chưa chạy được agent:\n\n{e}")
-    st.info("Gợi ý: sao chép `.env.example` thành `.env` rồi điền API key, xem README.md.")
+    st.info(
+        "Gợi ý: dùng `LLM_PROVIDER=demo` để chạy không cần API key, "
+        "hoặc điền key của provider thật."
+    )
     st.stop()
+
+if settings.provider == "demo":
+    st.info(
+        "🧪 Chế độ demo: quyết định của model được mô phỏng để output ổn định; "
+        "MCP discovery và tool call vẫn chạy thật."
+    )
 
 
 # ---------- Thanh bên: cho biết đang dùng provider/model nào + nút xoá hội thoại ----------
@@ -63,6 +72,10 @@ with st.sidebar:
 # "messages" chỉ để HIỂN THỊ lại lịch sử trên màn hình (agent tự giữ trí nhớ riêng).
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "pending_cleanup" not in st.session_state:
+    st.session_state.pending_cleanup = None
+
+confirmation_slot = st.empty()
 
 
 # ---------- Vẽ lại toàn bộ hội thoại đã có ----------
@@ -113,3 +126,27 @@ if prompt := st.chat_input("Nhập câu hỏi cho agent..."):
         "content": result.text,
         "steps": result.steps,
     })
+    if result.steps and result.steps[-1].tool.endswith("__find_duplicate_files"):
+        st.session_state.pending_cleanup = result.steps[-1].args["subfolder"]
+
+
+with confirmation_slot.container():
+    if st.session_state.pending_cleanup:
+        pending_folder = st.session_state.pending_cleanup
+        st.warning(
+            "Chưa có file nào bị thay đổi. Bạn có muốn chuyển các bản trùng "
+            "vào thùng rác không?"
+        )
+        if st.button("🗑️ Xác nhận chuyển bản trùng", type="primary"):
+            confirmation = f"Xác nhận dọn file trùng trong {pending_folder}"
+            st.session_state.messages.append({"role": "user", "content": confirmation})
+            cleanup_result = agent.run(confirmation)
+            st.session_state.messages.append(
+                {
+                    "role": "assistant",
+                    "content": cleanup_result.text,
+                    "steps": cleanup_result.steps,
+                }
+            )
+            st.session_state.pending_cleanup = None
+            st.rerun()

@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from .base import ToolSpec
 
 
 class ToolRegistry:
     """Store tool specifications and execute model-requested tool calls."""
 
-    def __init__(self, specs: list[ToolSpec]):
+    def __init__(self, specs: Iterable[ToolSpec]):
+        specs = list(specs)
+        names = [spec.name for spec in specs]
+        duplicates = sorted({name for name in names if names.count(name) > 1})
+        if duplicates:
+            raise ValueError(f"Trùng tên tool: {', '.join(duplicates)}")
         self._by_name = {spec.name: spec for spec in specs}
 
     def specs(self) -> list[ToolSpec]:

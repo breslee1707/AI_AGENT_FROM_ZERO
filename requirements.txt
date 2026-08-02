@@ -6,6 +6,7 @@ streamlit>=1.36.0        # dựng web UI bằng Python thuần
 
 # --- Tiện ích ---
 python-dotenv>=1.0.0     # đọc biến môi trường từ file .env
+send2trash>=1.8.3        # chuyển file vào Recycle Bin/Trash, không xóa vĩnh viễn
 
 # --- Nhà cung cấp LLM (chỉ cái bạn dùng mới thực sự cần key) ---
 google-genai>=1.0.0      # Gemini — provider MẶC ĐỊNH của series
@@ -14,3 +15,6 @@ openai>=1.40.0           # GPT/Codex — tuỳ chọn (cần key mới dùng đ�
 
 # --- Cần cho tool read_pdf ---
 pypdf>=4.0.0             # đọc nội dung file PDF
+
+# --- Kết nối tool từ MCP server ---
+mcp>=2.0.0,<3.0.0        # MCP Python SDK v2 — client discovery + tools/call

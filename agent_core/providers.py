@@ -15,13 +15,14 @@ hội thoại ở dạng CHUẨN HOÁ (trung lập) + danh sách tool, rồi tr�
   {"role": "tool",      "id": "<id lượt gọi>", "name": "<tên tool>",
                         "content": "<kết quả tool trả về>"}
 
-Nếu bạn mới học: hãy đọc kỹ GeminiClient (đường mặc định, đã kiểm thử). Hai client còn
-lại (Anthropic, OpenAI) làm y hệt một ý tưởng, chỉ khác cú pháp của từng hãng.
+Nếu bạn chưa có API key, DemoClient mô phỏng một kịch bản ổn định để quan sát vòng
+lặp. Khi dùng model thật, ba client còn lại chỉ khác nhau ở phần dịch định dạng.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 
 from .config import Settings
@@ -42,7 +43,154 @@ class NormalizedReply:
 
 
 # ============================================================================
-# GEMINI — đường mặc định, đã kiểm thử (dùng SDK chính thức google-genai)
+# DEMO — mô phỏng quyết định của model, không gọi API bên ngoài
+# ============================================================================
+class DemoClient:
+    """Deterministic provider for recording tutorials without an API key.
+
+    Only the model decision and final wording are scripted. Tool discovery and tool
+    execution still go through the real registry and MCP transport.
+    """
+
+    def complete(
+        self,
+        system: str,
+        history: list[dict],
+        tools: list[ToolSpec],
+    ) -> NormalizedReply:
+        del system  # The demo follows a small explicit scenario instead of a prompt.
+        if not history:
+            return NormalizedReply(text="Chế độ demo chưa nhận được câu hỏi.")
+
+        latest = history[-1]
+        if latest["role"] == "tool":
+            return self._answer_from_tool(latest)
+        if latest["role"] != "user":
+            return NormalizedReply(text="Chế độ demo đang chờ câu hỏi tiếp theo.")
+
+        question = latest["content"]
+        normalized = question.casefold()
+        subfolder = self._extract_subfolder(question)
+
+        if any(keyword in normalized for keyword in ("xác nhận", "confirm")):
+            tool = next(
+                (
+                    spec
+                    for spec in tools
+                    if spec.name.endswith("__trash_duplicate_files")
+                ),
+                None,
+            )
+            if tool is None:
+                return NormalizedReply(
+                    text="Demo cần MCP tool `trash_duplicate_files` nhưng chưa tìm thấy."
+                )
+            return NormalizedReply(
+                tool_calls=[
+                    {
+                        "id": "demo_trash_1",
+                        "name": tool.name,
+                        "args": {
+                            "subfolder": subfolder,
+                            "confirmation": "MOVE_DUPLICATES_TO_TRASH",
+                        },
+                    }
+                ]
+            )
+
+        if any(
+            keyword in normalized
+            for keyword in ("file trùng", "trùng lặp", "duplicate")
+        ):
+            tool = next(
+                (
+                    spec
+                    for spec in tools
+                    if spec.name.endswith("__find_duplicate_files")
+                ),
+                None,
+            )
+            if tool is None:
+                return NormalizedReply(
+                    text="Demo cần MCP tool `find_duplicate_files` nhưng chưa tìm thấy."
+                )
+
+            return NormalizedReply(
+                tool_calls=[
+                    {
+                        "id": "demo_call_1",
+                        "name": tool.name,
+                        "args": {"subfolder": subfolder, "min_size_kb": 0},
+                    }
+                ]
+            )
+
+        return NormalizedReply(
+            text=(
+                "Đây là provider demo không gọi API. Hãy thử: "
+                "`Tìm file trùng trong mcp_servers/demo_assets`."
+            )
+        )
+
+    @staticmethod
+    def _extract_subfolder(question: str) -> str:
+        match = re.search(
+            r"(?:trong(?:\s+(?:thư mục|folder))?|thư mục|folder)\s+"
+            r"[`'\"]?([A-Za-z0-9_./\\-]+)",
+            question,
+            flags=re.IGNORECASE,
+        )
+        return match.group(1) if match else "mcp_servers/demo_assets"
+
+    @staticmethod
+    def _answer_from_tool(message: dict) -> NormalizedReply:
+        content = message.get("content", "")
+        if content.startswith("[Lỗi"):
+            return NormalizedReply(text=f"MCP tool báo lỗi: {content}")
+
+        try:
+            payload = json.loads(content)
+            if message.get("name", "").endswith("__trash_duplicate_files"):
+                moved = payload.get("moved_files", [])
+                kept = payload.get("kept_files", [])
+                if not moved:
+                    return NormalizedReply(text="Không có bản trùng nào cần chuyển.")
+                rendered_moved = ", ".join(f"`{name}`" for name in moved)
+                rendered_kept = ", ".join(f"`{name}`" for name in kept)
+                return NormalizedReply(
+                    text=(
+                        f"Đã giữ {rendered_kept} và chuyển {rendered_moved} "
+                        "vào thùng rác của hệ điều hành. "
+                        "Bạn vẫn có thể khôi phục file nếu cần.\n\n"
+                        "_Quyết định của model đang được mô phỏng; "
+                        "MCP tool và thao tác file đã chạy thật._"
+                    )
+                )
+
+            groups = payload.get("groups", [])
+            total_groups = payload.get("total_groups", len(groups))
+            reclaimable = payload.get("total_reclaimable_bytes", 0)
+        except (json.JSONDecodeError, AttributeError):
+            return NormalizedReply(text=f"MCP tool đã trả về:\n\n{content}")
+
+        if not groups:
+            return NormalizedReply(text="Không tìm thấy file trùng trong thư mục này.")
+
+        files = groups[0].get("files", [])
+        rendered_files = " và ".join(f"`{name}`" for name in files)
+        return NormalizedReply(
+            text=(
+                f"Đã tìm thấy {total_groups} nhóm file trùng: {rendered_files}. "
+                f"Nếu giữ lại một bản, có thể giải phóng {reclaimable} byte.\n\n"
+                "_Chưa có file nào bị thay đổi. Hãy xác nhận trước khi dọn._\n\n"
+                "_Quyết định của model đang được mô phỏng; MCP discovery và tool call "
+                "vẫn chạy thật._"
+            )
+        )
+
+
+# ============================================================================
+# GEMINI — provider thật dùng SDK chính thức google-genai
 # ============================================================================
 class GeminiClient:
     def __init__(self, api_key: str, model: str, temperature: float):
@@ -297,6 +445,8 @@ class OpenAIClient:
 # ============================================================================
 def build_client(settings: Settings):
     """Trả về client phù hợp với provider đang chọn trong .env."""
+    if settings.provider == "demo":
+        return DemoClient()
     if settings.provider == "gemini":
         return GeminiClient(settings.gemini_api_key, settings.gemini_model, settings.temperature)
     if settings.provider == "anthropic":
